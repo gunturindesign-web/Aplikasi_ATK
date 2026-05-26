@@ -15,7 +15,7 @@ if not os.path.exists(DB_FILE):
 
 # Mengatur Tampilan Halaman Web
 st.set_page_config(page_title="Aplikasi ATK Pro", layout="wide")
-st.title("📦 Aplikasi Pencatatan, Mutasi & Edit ATK")
+st.title("📦 APLIKASI PERSEDIAAN BAPPEBTI")
 st.markdown("---")
 
 # Membaca Data dari Excel
