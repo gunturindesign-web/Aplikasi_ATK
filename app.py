@@ -253,6 +253,8 @@ elif menu == "📤 Catat Barang Keluar":
                     
                     with pd.ExcelWriter(DB_FILE, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
                         df_keluar.to_excel(writer, sheet_name="Keluar", index=False)
+                        streamlit
+openpyxl
                         
                     st.session_state.keranjang_keluar = []
                     st.success(f"🎉 Sukses! Semua item untuk Nota {no_bukti} berhasil dibukukan!")
