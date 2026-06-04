@@ -70,7 +70,7 @@ if menu == "📊 Dashboard & Mutasi":
         for col in ["Stok Awal", "Jumlah Masuk", "Jumlah Keluar", "Stok Akhir"]:
             df_mutasi[col] = df_mutasi[col].astype(int)
             
-        st.dataframe(df_mutasi, width="stretch", index=False)
+        st.dataframe(df_mutasi, use_container_width=True)
 
 
 # ==========================================
@@ -151,7 +151,7 @@ elif menu == "📥 Catat Barang Masuk":
             st.markdown(f"### 📋 Daftar Tampung Masuk (Nota: {no_bukti_masuk if no_bukti_masuk else '-'})")
             if st.session_state.keranjang_masuk:
                 df_temp_masuk = pd.DataFrame(st.session_state.keranjang_masuk)
-                st.dataframe(df_temp_masuk[["Nota", "Tanggal", "Nama Barang", "Jumlah Masuk", "Keterangan"]], width="stretch", index=False)
+                st.dataframe(df_temp_masuk[["Nota", "Tanggal", "Nama Barang", "Jumlah Masuk", "Keterangan"]], use_container_width=True)
                 
                 c_batal, c_simpan = st.columns(2)
                 if c_batal.button("🗑️ Kosongkan Daftar", key="clear_masuk", use_container_width=True):
@@ -231,7 +231,7 @@ elif menu == "📤 Catat Barang Keluar":
             st.markdown(f"### 🛒 Keranjang Sementara (Nota: {no_bukti if no_bukti else '-'})")
             if st.session_state.keranjang_keluar:
                 df_temp_keluar = pd.DataFrame(st.session_state.keranjang_keluar)
-                st.dataframe(df_temp_keluar[["Nota", "Tanggal", "Nama Barang", "Jumlah Keluar", "Keterangan"]], width="stretch", index=False)
+                st.dataframe(df_temp_keluar[["Nota", "Tanggal", "Nama Barang", "Jumlah Keluar", "Keterangan"]], use_container_width=True)
                 
                 c_batal, c_simpan = st.columns(2)
                 if c_batal.button("🗑️ Kosongkan Keranjang", key="clear_keluar", use_container_width=True):
