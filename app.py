@@ -19,11 +19,15 @@ def inisialisasi_database():
 # Jalankan inisialisasi database
 inisialisasi_database()
 
-# --- INSTANSIASI SESSION STATE (KERANJANG BELANJA MULTI-ITEM) ---
+# --- INSTANSIASI SESSION STATE (KERANJANG & TOMBOL EDIT STATE) ---
 if "keranjang_masuk" not in st.session_state:
     st.session_state.keranjang_masuk = []
 if "keranjang_keluar" not in st.session_state:
     st.session_state.keranjang_keluar = []
+if "mode_edit_masuk" not in st.session_state:
+    st.session_state.mode_edit_masuk = False
+if "mode_edit_keluar" not in st.session_state:
+    st.session_state.mode_edit_keluar = False
 
 # --- TAMPILAN UTAMA STREAMLIT ---
 st.set_page_config(page_title="Sistem Informasi ATK", layout="wide")
@@ -252,14 +256,17 @@ elif menu == "📤 Catat Barang Keluar":
 
 
 # ==========================================
-# 5. MENU: KELOLA & RIWAYAT DATA (HAPUS DATA)
+# 5. MENU: KELOLA & RIWAYAT DATA (EDIT & HAPUS)
 # ==========================================
 elif menu == "✏️ Kelola & Riwayat Data":
-    st.subheader("Kelola Riwayat Transaksi (Hapus Data)")
+    st.subheader("Kelola Riwayat Transaksi (Edit & Hapus Data)")
     
     kategori_data = st.radio("Pilih Data yang Ingin Dikelola:", ["📥 Riwayat Barang Masuk", "📤 Riwayat Barang Keluar"], horizontal=True)
     st.markdown("---")
     
+    # ------------------------------------------
+    # SUB-MENU: KELOLA BARANG MASUK
+    # ------------------------------------------
     if kategori_data == "📥 Riwayat Barang Masuk":
         if df_masuk.empty:
             st.info("Belum ada riwayat barang masuk.")
@@ -268,18 +275,59 @@ elif menu == "✏️ Kelola & Riwayat Data":
             df_masuk_view = df_masuk.merge(df_master[["Kode Barang", "Nama Barang"]], on="Kode Barang", how="left")
             st.dataframe(df_masuk_view[["Tanggal", "Kode Barang", "Nama Barang", "Jumlah Masuk"]], use_container_width=True)
             
-            st.markdown("#### Hapus Baris Transaksi")
-            indeks_hapus = st.number_input("Masukkan Nomor Baris yang ingin dihapus:", min_value=0, max_value=len(df_masuk)-1, step=1)
+            st.markdown("#### ⚙️ Aksi Penyesuaian Data")
+            indeks_pilihan = st.number_input("Masukkan Nomor Baris yang ingin diproses:", min_value=0, max_value=len(df_masuk)-1, step=1, key="idx_masuk")
             
-            item_terpilih = df_masuk_view.iloc[indeks_hapus]
-            st.warning(f"Item yang akan dihapus: **{item_terpilih['Nama Barang']}** senilai **{item_terpilih['Jumlah Masuk']}** unit")
+            item_terpilih = df_masuk_view.iloc[indeks_pilihan]
+            st.info(f"Item Terpilih: **{item_terpilih['Nama Barang']}** | Jumlah: **{item_terpilih['Jumlah Masuk']}** | Tanggal: **{item_terpilih['Tanggal']}**")
             
-            if st.button("🗑️ HAPUS TRANSAKSI MASUK PERMANEN", type="primary"):
-                df_masuk = df_masuk.drop(df_masuk.index[indeks_hapus]).reset_index(drop=True)
+            col_btn1, col_btn2 = st.columns(2)
+            if col_btn1.button("✏️ EDIT DATA BARIS INI", key="btn_edit_m"):
+                st.session_state.mode_edit_masuk = True
+                st.rerun()
+                
+            if col_btn2.button("🗑️ HAPUS TRANSAKSI PERMANEN", type="primary", key="btn_del_m"):
+                df_masuk = df_masuk.drop(df_masuk.index[indeks_pilihan]).reset_index(drop=True)
                 simpan_ke_excel(df_masuk, "Masuk")
                 st.success("✔️ Transaksi masuk berhasil dihapus!")
+                st.session_state.mode_edit_masuk = False
                 st.rerun()
+                
+            # FORM FORM EDIT BARANG MASUK
+            if st.session_state.mode_edit_masuk:
+                st.markdown("---")
+                st.markdown("### 📝 Form Edit Barang Masuk")
+                with st.form("form_edit_masuk"):
+                    edit_tgl = st.date_input("Ubah Tanggal", pd.to_datetime(item_terpilih["Tanggal"]))
+                    # Dropdown pilihan barang otomatis diarahkan ke barang lama
+                    list_barang = (df_master["Kode Barang"] + " - " + df_master["Nama Barang"]).tolist()
+                    default_idx = df_master["Kode Barang"].tolist().index(item_terpilih["Kode Barang"])
+                    edit_barang = st.selectbox("Ubah Barang", list_barang, index=default_idx)
+                    edit_qty = st.number_input("Ubah Jumlah Masuk", min_value=1, value=int(item_terpilih["Jumlah Masuk"]), step=1)
+                    
+                    c_simpan, c_batal = st.columns(2)
+                    btn_save = c_simpan.form_submit_button("💾 SIMPAN PERUBAHAN DATA")
+                    btn_cancel = c_batal.form_submit_button("❌ BATAL EDIT")
+                    
+                    if btn_save:
+                        edit_kode = edit_barang.split(" - ")[0]
+                        # Update dataframe masuk pada indeks terpilih
+                        df_masuk.at[indeks_pilihan, "Tanggal"] = str(edit_tgl)
+                        df_masuk.at[indeks_pilihan, "Kode Barang"] = edit_kode
+                        df_masuk.at[indeks_pilihan, "Jumlah Masuk"] = int(edit_qty)
+                        
+                        simpan_ke_excel(df_masuk, "Masuk")
+                        st.success("🎉 Perubahan data masuk berhasil disimpan permanen!")
+                        st.session_state.mode_edit_masuk = False
+                        st.rerun()
+                        
+                    if btn_cancel:
+                        st.session_state.mode_edit_masuk = False
+                        st.rerun()
 
+    # ------------------------------------------
+    # SUB-MENU: KELOLA BARANG KELUAR
+    # ------------------------------------------
     elif kategori_data == "📤 Riwayat Barang Keluar":
         if df_keluar.empty:
             st.info("Belum ada riwayat barang keluar.")
@@ -288,14 +336,66 @@ elif menu == "✏️ Kelola & Riwayat Data":
             df_keluar_view = df_keluar.merge(df_master[["Kode Barang", "Nama Barang"]], on="Kode Barang", how="left")
             st.dataframe(df_keluar_view[["Tanggal", "Kode Barang", "Nama Barang", "Jumlah Keluar", "Keterangan"]], use_container_width=True)
             
-            st.markdown("#### Hapus Baris Transaksi")
-            indeks_hapus = st.number_input("Masukkan Nomor Baris yang ingin dihapus:", min_value=0, max_value=len(df_keluar)-1, step=1)
+            st.markdown("#### ⚙️ Aksi Penyesuaian Data")
+            indeks_pilihan = st.number_input("Masukkan Nomor Baris yang ingin diproses:", min_value=0, max_value=len(df_keluar)-1, step=1, key="idx_keluar")
             
-            item_terpilih = df_keluar_view.iloc[indeks_hapus]
-            st.warning(f"Item yang akan dihapus: **{item_terpilih['Nama Barang']}** sejumlah **{item_terpilih['Jumlah Keluar']}** unit")
+            item_terpilih = df_keluar_view.iloc[indeks_pilihan]
+            st.info(f"Item Terpilih: **{item_terpilih['Nama Barang']}** | Jumlah: **{item_terpilih['Jumlah Keluar']}** | Keterangan: **{item_terpilih['Keterangan']}**")
             
-            if st.button("🗑️ HAPUS TRANSAKSI KELUAR PERMANEN", type="primary"):
-                df_keluar = df_keluar.drop(df_keluar.index[indeks_hapus]).reset_index(drop=True)
+            col_btn1, col_btn2 = st.columns(2)
+            if col_btn1.button("✏️ EDIT DATA BARIS INI", key="btn_edit_k"):
+                st.session_state.mode_edit_keluar = True
+                st.rerun()
+                
+            if col_btn2.button("🗑️ HAPUS TRANSAKSI PERMANEN", type="primary", key="btn_del_k"):
+                df_keluar = df_keluar.drop(df_keluar.index[indeks_pilihan]).reset_index(drop=True)
                 simpan_ke_excel(df_keluar, "Keluar")
                 st.success("✔️ Transaksi keluar berhasil dihapus!")
+                st.session_state.mode_edit_keluar = False
                 st.rerun()
+                
+            # FORM FORM EDIT BARANG KELUAR
+            if st.session_state.mode_edit_keluar:
+                st.markdown("---")
+                st.markdown("### 📝 Form Edit Barang Keluar")
+                with st.form("form_edit_keluar"):
+                    edit_tgl = st.date_input("Ubah Tanggal", pd.to_datetime(item_terpilih["Tanggal"]))
+                    
+                    list_barang = (df_master["Kode Barang"] + " - " + df_master["Nama Barang"]).tolist()
+                    default_idx = df_master["Kode Barang"].tolist().index(item_terpilih["Kode Barang"])
+                    edit_barang = st.selectbox("Ubah Barang", list_barang, index=default_idx)
+                    
+                    # Validasi batas stok khusus saat edit data
+                    edit_kode = edit_barang.split(" - ")[0]
+                    stok_gudang = hitung_stok_sekarang(edit_kode)
+                    # Kembalikan stok item lama sementara waktu ke perhitungan biar tidak salah deteksi minus
+                    if edit_kode == item_terpilih["Kode Barang"]:
+                        stok_gudang += int(item_terpilih["Jumlah Keluar"])
+                        
+                    st.caption(f"Batas Maksimal Pengambilan Aman: **{stok_gudang}**")
+                    edit_qty = st.number_input("Ubah Jumlah Keluar", min_value=1, value=int(item_terpilih["Jumlah Keluar"]), step=1)
+                    edit_ket = st.text_input("Ubah Keterangan / Bagian", value=str(item_terpilih["Keterangan"]))
+                    
+                    c_simpan, c_batal = st.columns(2)
+                    btn_save = c_simpan.form_submit_button("💾 SIMPAN PERUBAHAN DATA")
+                    btn_cancel = c_batal.form_submit_button("❌ BATAL EDIT")
+                    
+                    if btn_save:
+                        if edit_qty > stok_gudang:
+                            st.error(f"❌ Transaksi Gagal! Jumlah keluar ({edit_qty}) melebihi stok yang ada ({stok_gudang}).")
+                        elif edit_ket.strip() == "":
+                            st.error("❌ Keterangan tidak boleh kosong!")
+                        else:
+                            df_keluar.at[indeks_pilihan, "Tanggal"] = str(edit_tgl)
+                            df_keluar.at[indeks_pilihan, "Kode Barang"] = edit_kode
+                            df_keluar.at[indeks_pilihan, "Jumlah Keluar"] = int(edit_qty)
+                            df_keluar.at[indeks_pilihan, "Keterangan"] = edit_ket.strip()
+                            
+                            simpan_ke_excel(df_keluar, "Keluar")
+                            st.success("🎉 Perubahan data keluar berhasil disimpan permanen!")
+                            st.session_state.mode_edit_keluar = False
+                            st.rerun()
+                            
+                    if btn_cancel:
+                        st.session_state.mode_edit_keluar = False
+                        st.rerun()
