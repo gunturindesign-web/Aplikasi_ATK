@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+from io import BytesIO
 
 # Nama file database Excel
 DB_FILE = "database_atk.xlsx"
@@ -63,9 +64,17 @@ def simpan_ke_excel(df, sheet_name):
     with pd.ExcelWriter(DB_FILE, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
         df.to_excel(writer, sheet_name=sheet_name, index=False)
 
+# --- FUNGSI MENGUBAH DATAFRAME MENJADI FILE EXCEL DI MEMORI (UNTUK DOWNLOAD) ---
+def konversi_ke_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Laporan')
+    processed_data = output.getvalue()
+    return processed_data
+
 
 # ==========================================
-# 1. MENU: DASHBOARD & MUTASI
+# 1. MENU: DASHBOARD & MUTASI (DENGAN CETAK EXCEL)
 # ==========================================
 if menu == "📊 Dashboard & Mutasi":
     st.subheader("Laporan Mutasi & Status Stok ATK")
@@ -73,19 +82,78 @@ if menu == "📊 Dashboard & Mutasi":
     if df_master.empty:
         st.info("Belum ada data barang. Silakan tambah barang baru terlebih dahulu.")
     else:
-        total_masuk = df_masuk.groupby("Kode Barang")["Jumlah Masuk"].sum().reset_index()
-        total_keluar = df_keluar.groupby("Kode Barang")["Jumlah Keluar"].sum().reset_index()
+        tipe_laporan = st.radio("Pilih Mode Tampilan Laporan:", ["📋 Ringkasan Semua Stok", "🔍 Lacak Histori Rinci Per Barang"], horizontal=True)
+        st.markdown("---")
         
-        df_mutasi = df_master.merge(total_masuk, on="Kode Barang", how="left").fillna(0)
-        df_mutasi = df_mutasi.merge(total_keluar, on="Kode Barang", how="left").fillna(0)
-        
-        df_mutasi["Stok Akhir"] = df_mutasi["Stok Awal"] + df_mutasi["Jumlah Masuk"] - df_mutasi["Jumlah Keluar"]
-        df_mutasi["Status"] = df_mutasi["Stok Akhir"].apply(lambda x: "🟢 MASIH" if x > 0 else "🔴 HABIS")
-        
-        for col in ["Stok Awal", "Jumlah Masuk", "Jumlah Keluar", "Stok Akhir"]:
-            df_mutasi[col] = df_mutasi[col].astype(int)
+        if tipe_laporan == "📋 Ringkasan Semua Stok":
+            total_masuk = df_masuk.groupby("Kode Barang")["Jumlah Masuk"].sum().reset_index()
+            total_keluar = df_keluar.groupby("Kode Barang")["Jumlah Keluar"].sum().reset_index()
             
-        st.dataframe(df_mutasi, use_container_width=True)
+            df_mutasi = df_master.merge(total_masuk, on="Kode Barang", how="left").fillna(0)
+            df_mutasi = df_mutasi.merge(total_keluar, on="Kode Barang", how="left").fillna(0)
+            
+            df_mutasi["Stok Akhir"] = df_mutasi["Stok Awal"] + df_mutasi["Jumlah Masuk"] - df_mutasi["Jumlah Keluar"]
+            df_mutasi["Status"] = df_mutasi["Stok Akhir"].apply(lambda x: "🟢 MASIH" if x > 0 else "🔴 HABIS")
+            
+            for col in ["Stok Awal", "Jumlah Masuk", "Jumlah Keluar", "Stok Akhir"]:
+                df_mutasi[col] = df_mutasi[col].astype(int)
+                
+            st.dataframe(df_mutasi, use_container_width=True)
+            
+            # --- TOMBOL DOWNLOAD LAPORAN RINGKASAN STOK ---
+            excel_data = konversi_ke_excel(df_mutasi)
+            st.download_button(
+                label="📥 CETAK / DOWNLOAD LAPORAN STOK (EXCEL)",
+                data=excel_data,
+                file_name="Laporan_Ringkasan_Stok_ATK.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            
+        else:
+            st.markdown("### 🔎 Kartu Kendali & Histori Barang")
+            pilihan_lacak = st.selectbox("Pilih ATK yang ingin Anda lacak historinya:", df_master["Kode Barang"] + " - " + df_master["Nama Barang"])
+            kode_lacak = pilihan_lacak.split(" - ")[0]
+            nama_lacak = pilihan_lacak.split(" - ")[1]
+            
+            stok_saat_ini = hitung_stok_sekarang(kode_lacak)
+            st.metric(label=f"Sisa Stok Aktual '{nama_lacak}' saat ini", value=f"{stok_saat_ini} unit")
+            
+            col_h1, col_h2 = st.columns(2)
+            
+            with col_h1:
+                st.markdown("#### 📥 Riwayat Barang Masuk (Restock)")
+                df_masuk_item = df_masuk[df_masuk["Kode Barang"] == kode_lacak]
+                if df_masuk_item.empty:
+                    st.info("Belum pernah ada riwayat barang masuk untuk item ini.")
+                else:
+                    st.dataframe(df_masuk_item[["Tanggal", "Jumlah Masuk"]], use_container_width=True)
+                    
+                    # --- DOWNLOAD RIWAYAT MASUK ITEM ---
+                    excel_masuk = konversi_ke_excel(df_masuk_item[["Tanggal", "Kode Barang", "Jumlah Masuk"]])
+                    st.download_button(
+                        label=f"🟢 Cetak Riwayat Masuk {nama_lacak}",
+                        data=excel_masuk,
+                        file_name=f"Riwayat_Masuk_{kode_lacak}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                    
+            with col_h2:
+                st.markdown("#### 📤 Riwayat Pengambilan (Barang Keluar)")
+                df_keluar_item = df_keluar[df_keluar["Kode Barang"] == kode_lacak]
+                if df_keluar_item.empty:
+                    st.info("Belum pernah ada riwayat pengambilan/barang keluar untuk item ini.")
+                else:
+                    df_keluar_view_item = df_keluar_item.merge(df_master[["Kode Barang", "Nama Barang"]], on="Kode Barang", how="left")
+                    st.dataframe(df_keluar_view_item[["Tanggal", "Jumlah Keluar", "Keterangan"]], use_container_width=True)
+                    
+                    # --- DOWNLOAD RIWAYAT KELUAR ITEM ---
+                    excel_keluar = konversi_ke_excel(df_keluar_view_item[["Tanggal", "Kode Barang", "Nama Barang", "Jumlah Keluar", "Keterangan"]])
+                    st.download_button(
+                        label=f"🔴 Cetak Riwayat Keluar {nama_lacak}",
+                        data=excel_keluar,
+                        file_name=f"Riwayat_Keluar_{kode_lacak}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
 
 
 # ==========================================
@@ -264,9 +332,6 @@ elif menu == "✏️ Kelola & Riwayat Data":
     kategori_data = st.radio("Pilih Data yang Ingin Dikelola:", ["📥 Riwayat Barang Masuk", "📤 Riwayat Barang Keluar"], horizontal=True)
     st.markdown("---")
     
-    # ------------------------------------------
-    # SUB-MENU: KELOLA BARANG MASUK
-    # ------------------------------------------
     if kategori_data == "📥 Riwayat Barang Masuk":
         if df_masuk.empty:
             st.info("Belum ada riwayat barang masuk.")
@@ -293,13 +358,11 @@ elif menu == "✏️ Kelola & Riwayat Data":
                 st.session_state.mode_edit_masuk = False
                 st.rerun()
                 
-            # FORM FORM EDIT BARANG MASUK
             if st.session_state.mode_edit_masuk:
                 st.markdown("---")
                 st.markdown("### 📝 Form Edit Barang Masuk")
                 with st.form("form_edit_masuk"):
                     edit_tgl = st.date_input("Ubah Tanggal", pd.to_datetime(item_terpilih["Tanggal"]))
-                    # Dropdown pilihan barang otomatis diarahkan ke barang lama
                     list_barang = (df_master["Kode Barang"] + " - " + df_master["Nama Barang"]).tolist()
                     default_idx = df_master["Kode Barang"].tolist().index(item_terpilih["Kode Barang"])
                     edit_barang = st.selectbox("Ubah Barang", list_barang, index=default_idx)
@@ -311,7 +374,6 @@ elif menu == "✏️ Kelola & Riwayat Data":
                     
                     if btn_save:
                         edit_kode = edit_barang.split(" - ")[0]
-                        # Update dataframe masuk pada indeks terpilih
                         df_masuk.at[indeks_pilihan, "Tanggal"] = str(edit_tgl)
                         df_masuk.at[indeks_pilihan, "Kode Barang"] = edit_kode
                         df_masuk.at[indeks_pilihan, "Jumlah Masuk"] = int(edit_qty)
@@ -325,9 +387,6 @@ elif menu == "✏️ Kelola & Riwayat Data":
                         st.session_state.mode_edit_masuk = False
                         st.rerun()
 
-    # ------------------------------------------
-    # SUB-MENU: KELOLA BARANG KELUAR
-    # ------------------------------------------
     elif kategori_data == "📤 Riwayat Barang Keluar":
         if df_keluar.empty:
             st.info("Belum ada riwayat barang keluar.")
@@ -354,7 +413,6 @@ elif menu == "✏️ Kelola & Riwayat Data":
                 st.session_state.mode_edit_keluar = False
                 st.rerun()
                 
-            # FORM FORM EDIT BARANG KELUAR
             if st.session_state.mode_edit_keluar:
                 st.markdown("---")
                 st.markdown("### 📝 Form Edit Barang Keluar")
@@ -365,10 +423,8 @@ elif menu == "✏️ Kelola & Riwayat Data":
                     default_idx = df_master["Kode Barang"].tolist().index(item_terpilih["Kode Barang"])
                     edit_barang = st.selectbox("Ubah Barang", list_barang, index=default_idx)
                     
-                    # Validasi batas stok khusus saat edit data
                     edit_kode = edit_barang.split(" - ")[0]
                     stok_gudang = hitung_stok_sekarang(edit_kode)
-                    # Kembalikan stok item lama sementara waktu ke perhitungan biar tidak salah deteksi minus
                     if edit_kode == item_terpilih["Kode Barang"]:
                         stok_gudang += int(item_terpilih["Jumlah Keluar"])
                         
