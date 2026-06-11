@@ -32,7 +32,7 @@ if "mode_edit_keluar" not in st.session_state:
 
 # --- TAMPILAN UTAMA STREAMLIT ---
 st.set_page_config(page_title="Sistem Informasi ATK", layout="wide")
-st.title("📦 Sistem Pencatatan & Mutasi ATK Sekretariat Bappebti")
+st.title("📦 Sistem Pencatatan & Mutasi ATK Set Bappebti")
 st.markdown("---")
 
 # Menu Navigasi di Samping (Sidebar)
