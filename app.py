@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
+from io import BytesIO
 
 # =====================================================================
 # ⚠️ MASUKKAN LINK GOOGLE SHEETS & URL APPS SCRIPT KAMU DI SINI!
@@ -24,7 +25,7 @@ try:
     df_masuk.columns = df_masuk.columns.str.strip().str.title()
     df_keluar.columns = df_keluar.columns.str.strip().str.title()
 except Exception as e:
-    st.error("❌ Gagal membaca Google Sheets. Pastikan URL sudah benar dan statusnya 'Anyone with the link'!")
+    st.error("❌ Gagal membaca Google Sheets. Pastikan URL dan Apps Script sudah benar!")
     st.stop()
 
 if "Kode Barang" not in df_master.columns:
@@ -42,6 +43,10 @@ if "keranjang_masuk" not in st.session_state:
     st.session_state.keranjang_masuk = []
 if "keranjang_keluar" not in st.session_state:
     st.session_state.keranjang_keluar = []
+if "mode_edit_masuk" not in st.session_state:
+    st.session_state.mode_edit_masuk = False
+if "mode_edit_keluar" not in st.session_state:
+    st.session_state.mode_edit_keluar = False
 
 # --- TAMPILAN UTAMA STREAMLIT ---
 st.set_page_config(page_title="Sistem Informasi ATK Set Bappebti", layout="wide")
@@ -50,7 +55,13 @@ st.markdown("---")
 
 menu = st.sidebar.selectbox(
     "PILIH MENU:", 
-    ["📊 Dashboard & Mutasi", "➕ Input Barang Baru", "📥 Catat Barang Masuk", "📤 Catat Barang Keluar"]
+    [
+        "📊 Dashboard & Mutasi", 
+        "➕ Input Barang Baru", 
+        "📥 Catat Barang Masuk", 
+        "📤 Catat Barang Keluar",
+        "✏️ Kelola & Riwayat Data"
+    ]
 )
 
 def hitung_stok_sekarang(kode_barang):
@@ -133,6 +144,7 @@ elif menu == "➕ Input Barang Baru":
             else:
                 payload = {
                     "sheet": "Master",
+                    "action": "append",
                     "data": [[kode, nama, int(stok_awal)]]
                 }
                 res = requests.post(URL_APPS_SCRIPT, data=json.dumps(payload))
@@ -194,9 +206,8 @@ elif menu == "📥 Catat Barang Masuk":
                 st.rerun()
                 
             if c_simpan.button("💾 SIMPAN LANGSUNG KE GOOGLE SHEETS", type="primary", key="save_masuk", use_container_width=True):
-                # Format susunan baris agar cocok dengan urutan kolom di Google Sheets
                 data_rows = [[item["Tanggal"], item["Kode Barang"], item["Jumlah Masuk"]] for item in st.session_state.keranjang_masuk]
-                payload = {"sheet": "Masuk", "data": data_rows}
+                payload = {"sheet": "Masuk", "action": "append", "data": data_rows}
                 
                 res = requests.post(URL_APPS_SCRIPT, data=json.dumps(payload))
                 if res.status_code == 200:
@@ -270,9 +281,8 @@ elif menu == "📤 Catat Barang Keluar":
                 st.rerun()
                 
             if c_simpan.button("💾 SIMPAN BARANG KELUAR PERMANEN", type="primary", key="save_keluar", use_container_width=True):
-                # Susun data sesuai kolom tab Keluar: Tanggal, Kode Barang, Jumlah Keluar, Keterangan
                 data_rows = [[item["Tanggal"], item["Kode Barang"], item["Jumlah Keluar"], item["Keterangan"]] for item in st.session_state.keranjang_keluar]
-                payload = {"sheet": "Keluar", "data": data_rows}
+                payload = {"sheet": "Keluar", "action": "append", "data": data_rows}
                 
                 res = requests.post(URL_APPS_SCRIPT, data=json.dumps(payload))
                 if res.status_code == 200:
@@ -283,3 +293,164 @@ elif menu == "📤 Catat Barang Keluar":
                     st.error("❌ Gagal mengirim transaksi ke Google Sheets.")
         else:
             st.info("Keranjang pengeluaran kosong.")
+
+
+# ==========================================
+# 5. MENU: KELOLA & RIWAYAT DATA (EDIT & HAPUS CLOUD)
+# ==========================================
+elif menu == "✏️ Kelola & Riwayat Data":
+    st.subheader("Kelola Riwayat Transaksi (Edit, Hapus & Tambah Cloud)")
+    
+    kategori_data = st.radio("Pilih Data yang Ingin Dikelola:", ["📥 Riwayat Barang Masuk", "📤 Riwayat Barang Keluar"], horizontal=True)
+    st.markdown("---")
+    
+    # ------------------------------------------
+    # MENGELOLA DATA MASUK
+    # ------------------------------------------
+    if kategori_data == "📥 Riwayat Barang Masuk":
+        if df_masuk.empty:
+            st.info("Belum ada riwayat barang masuk.")
+        else:
+            st.markdown("### Daftar Transaksi Masuk")
+            df_masuk_view = df_masuk.merge(df_master[["Kode Barang", "Nama Barang"]], on="Kode Barang", how="left")
+            st.dataframe(df_masuk_view[["Tanggal", "Kode Barang", "Nama Barang", "Jumlah Masuk"]], use_container_width=True)
+            
+            st.markdown("#### ⚙️ Aksi Penyesuaian Data")
+            indeks_pilihan = st.number_input("Masukkan Nomor Baris yang ingin diproses:", min_value=0, max_value=len(df_masuk)-1, step=1, key="idx_masuk")
+            
+            item_terpilih = df_masuk_view.iloc[indeks_pilihan]
+            st.info(f"Item Terpilih: **{item_terpilih['Nama Barang']}** | Jumlah: **{item_terpilih['Jumlah Masuk']}**")
+            
+            col_btn1, col_btn2 = st.columns(2)
+            if col_btn1.button("✏️ EDIT / TAMBAH BARANG DI BARIS INI", key="btn_edit_m"):
+                st.session_state.mode_edit_masuk = True
+                st.rerun()
+                
+            if col_btn2.button("🗑️ HAPUS TRANSAKSI PERMANEN", type="primary", key="btn_del_m"):
+                df_masuk_baru = df_masuk.drop(df_masuk.index[indeks_pilihan]).reset_index(drop=True)
+                data_rows = df_masuk_baru.values.tolist()
+                payload = {"sheet": "Masuk", "action": "overwrite", "headers": ["Tanggal", "Kode Barang", "Jumlah Masuk"], "data": data_rows}
+                
+                res = requests.post(URL_APPS_SCRIPT, data=json.dumps(payload))
+                if res.status_code == 200:
+                    st.success("✔️ Data masuk berhasil dihapus dari Cloud!")
+                    st.session_state.mode_edit_masuk = False
+                    st.rerun()
+                
+            if st.session_state.mode_edit_masuk:
+                with st.form("form_edit_masuk"):
+                    edit_tgl = st.date_input("Tanggal", pd.to_datetime(item_terpilih["Tanggal"]))
+                    list_barang = (df_master["Kode Barang"] + " - " + df_master["Nama Barang"]).tolist()
+                    default_idx = df_master["Kode Barang"].tolist().index(item_terpilih["Kode Barang"])
+                    edit_barang = st.selectbox("Pilih Barang", list_barang, index=default_idx)
+                    edit_qty = st.number_input("Jumlah Masuk", min_value=1, value=int(item_terpilih["Jumlah Masuk"]), step=1)
+                    
+                    c_edit, c_tambah, c_batal = st.columns(3)
+                    btn_save = c_edit.form_submit_button("💾 SIMPAN PERUBAHAN BARIS")
+                    btn_add_new = c_tambah.form_submit_button("➕ TAMBAH SEBAGAI BARANG BARU")
+                    btn_cancel = c_batal.form_submit_button("❌ BATAL")
+                    
+                    if btn_save:
+                        edit_kode = edit_barang.split(" - ")[0].strip().upper()
+                        df_masuk.at[indeks_pilihan, "Tanggal"] = str(edit_tgl)
+                        df_masuk.at[indeks_pilihan, "Kode Barang"] = edit_kode
+                        df_masuk.at[indeks_pilihan, "Jumlah Masuk"] = int(edit_qty)
+                        
+                        payload = {"sheet": "Masuk", "action": "overwrite", "headers": ["Tanggal", "Kode Barang", "Jumlah Masuk"], "data": df_masuk.values.tolist()}
+                        requests.post(URL_APPS_SCRIPT, data=json.dumps(payload))
+                        st.session_state.mode_edit_masuk = False
+                        st.rerun()
+                        
+                    if btn_add_new:
+                        edit_kode = edit_barang.split(" - ")[0].strip().upper()
+                        payload = {"sheet": "Masuk", "action": "append", "data": [[str(edit_tgl), edit_kode, int(edit_qty)]]}
+                        requests.post(URL_APPS_SCRIPT, data=json.dumps(payload))
+                        st.session_state.mode_edit_masuk = False
+                        st.rerun()
+                        
+                    if btn_cancel:
+                        st.session_state.mode_edit_masuk = False
+                        st.rerun()
+
+    # ------------------------------------------
+    # MENGELOLA DATA KELUAR
+    # ------------------------------------------
+    elif kategori_data == "📤 Riwayat Barang Keluar":
+        if df_keluar.empty:
+            st.info("Belum ada riwayat barang keluar.")
+        else:
+            st.markdown("### Daftar Transaksi Keluar")
+            df_keluar_view = df_keluar.merge(df_master[["Kode Barang", "Nama Barang"]], on="Kode Barang", how="left")
+            st.dataframe(df_keluar_view[["Tanggal", "Kode Barang", "Nama Barang", "Jumlah Keluar", "Keterangan"]], use_container_width=True)
+            
+            st.markdown("#### ⚙️ Aksi Penyesuaian Data")
+            indeks_pilihan = st.number_input("Masukkan Nomor Baris yang ingin diproses:", min_value=0, max_value=len(df_keluar)-1, step=1, key="idx_keluar")
+            
+            item_terpilih = df_keluar_view.iloc[indeks_pilihan]
+            st.info(f"Item Terpilih: **{item_terpilih['Nama Barang']}** | Keterangan: **{item_terpilih['Keterangan']}**")
+            
+            col_btn1, col_btn2 = st.columns(2)
+            if col_btn1.button("✏️ EDIT / TAMBAH BARANG DI BARIS INI", key="btn_edit_k"):
+                st.session_state.mode_edit_keluar = True
+                st.rerun()
+                
+            if col_btn2.button("🗑️ HAPUS TRANSAKSI PERMANEN", type="primary", key="btn_del_k"):
+                df_keluar_baru = df_keluar.drop(df_keluar.index[indeks_pilihan]).reset_index(drop=True)
+                payload = {"sheet": "Keluar", "action": "overwrite", "headers": ["Tanggal", "Kode Barang", "Jumlah Keluar", "Keterangan"], "data": df_keluar_baru.values.tolist()}
+                
+                res = requests.post(URL_APPS_SCRIPT, data=json.dumps(payload))
+                if res.status_code == 200:
+                    st.success("✔️ Data keluar berhasil dihapus dari Cloud!")
+                    st.session_state.mode_edit_keluar = False
+                    st.rerun()
+                
+            if st.session_state.mode_edit_keluar:
+                with st.form("form_edit_keluar"):
+                    edit_tgl = st.date_input("Tanggal", pd.to_datetime(item_terpilih["Tanggal"]))
+                    list_barang = (df_master["Kode Barang"] + " - " + df_master["Nama Barang"]).tolist()
+                    default_idx = df_master["Kode Barang"].tolist().index(item_terpilih["Kode Barang"])
+                    edit_barang = st.selectbox("Pilih Barang", list_barang, index=default_idx)
+                    
+                    edit_kode = edit_barang.split(" - ")[0].strip().upper()
+                    stok_gudang = hitung_stok_sekarang(edit_kode)
+                    if edit_kode == item_terpilih["Kode Barang"]:
+                        stok_gudang += int(item_terpilih["Jumlah Keluar"])
+                        
+                    st.caption(f"Batas Maksimal Pengambilan Aman: **{stok_gudang}**")
+                    edit_qty = st.number_input("Jumlah Keluar", min_value=1, value=int(item_terpilih["Jumlah Keluar"]), step=1)
+                    edit_ket = st.text_input("Keterangan / Bagian", value=str(item_terpilih["Keterangan"]))
+                    
+                    c_edit, c_tambah, c_batal = st.columns(3)
+                    btn_save = c_edit.form_submit_button("💾 SIMPAN PERUBAHAN BARIS")
+                    btn_add_new = c_tambah.form_submit_button("➕ TAMBAH SEBAGAI BARANG BARU")
+                    btn_cancel = c_batal.form_submit_button("❌ BATAL")
+                    
+                    if btn_save:
+                        if edit_qty > stok_gudang:
+                            st.error("❌ Jumlah pengambilan melebihi batas stok!")
+                        elif edit_ket.strip() == "":
+                            st.error("❌ Keterangan tidak boleh kosong!")
+                        else:
+                            df_keluar.at[indeks_pilihan, "Tanggal"] = str(edit_tgl)
+                            df_keluar.at[indeks_pilihan, "Kode Barang"] = edit_kode
+                            df_keluar.at[indeks_pilihan, "Jumlah Keluar"] = int(edit_qty)
+                            df_keluar.at[indeks_pilihan, "Keterangan"] = edit_ket.strip()
+                            
+                            payload = {"sheet": "Keluar", "action": "overwrite", "headers": ["Tanggal", "Kode Barang", "Jumlah Keluar", "Keterangan"], "data": df_keluar.values.tolist()}
+                            requests.post(URL_APPS_SCRIPT, data=json.dumps(payload))
+                            st.session_state.mode_edit_keluar = False
+                            st.rerun()
+                            
+                    if btn_add_new:
+                        stok_riil = hitung_stok_sekarang(edit_kode)
+                        if edit_qty > stok_riil:
+                            st.error("❌ Stok barang baru ini tidak mencukupi!")
+                        else:
+                            payload = {"sheet": "Keluar", "action": "append", "data": [[str(edit_tgl), edit_kode, int(edit_qty), edit_ket.strip()]]}
+                            requests.post(URL_APPS_SCRIPT, data=json.dumps(payload))
+                            st.session_state.mode_edit_keluar = False
+                            st.rerun()
+                            
+                    if btn_cancel:
+                        st.session_state.mode_edit_keluar = False
+                        st.rerun()
