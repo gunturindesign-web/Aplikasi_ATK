@@ -6,9 +6,9 @@ import json
 # =====================================================================
 # ⚠️ MASUKKAN LINK GOOGLE SHEETS & URL APPS SCRIPT KAMU DI SINI!
 # =====================================================================
-URL_SPREADSHEET = "https://docs.google.com/spreadsheets/d/1Q61L_WivjAshFAetjFi2PFe1KkFb2n5Z8k8Yz6xaD1Y/edit?usp=sharing"
+URL_SPREADSHEET = "https://docs.google.com/spreadsheets/d/19Qv2SMhD4Ua5NBAI2DDzC46NT6rcaTcJSJ1Hb8ARiAU/edit?usp=sharing"
 
-URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbztBCxr9fmFeSN-lzlEbVNxNAVaR9IpnOrPSUgeM0homRXAtWzL9tkLQ6C7hqYMx9_gPQ/exec"
+URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbwU90nE05v1iqX_4AHQtAzXtueg3ppGwSDr-WG-45hN3n1ycIYMMTlMZL0SXmoKLQWj/exec"
 
 # Fungsi membaca data live dari Google Sheets
 def dapatkan_url_sheet(url, nama_sheet):
