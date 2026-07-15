@@ -3,30 +3,40 @@ import pandas as pd
 from io import BytesIO
 
 # =====================================================================
-# ⚠️ GANTI LINK DI BAWAH INI DENGAN LINK GOOGLE SHEETS KAMU YANG SUDAH DISHARE!
+# ⚠️ PASTIKAN LINK DI BAWAH INI SUDAH SESUAI DENGAN LINK GOOGLE SHEETS KAMU!
 # =====================================================================
-URL_SPREADSHEET = "https://docs.google.com/spreadsheets/d/1dVQPDihjQEL0CqBBvbuzZBQMqxVFJRole__Zyc3yzbM/edit?usp=sharing"
+URL_SPREADSHEET = "https://docs.google.com/spreadsheets/d/19Qv2SMhD4Ua5NBAI2DDzC46NT6rcaTcJSJ1Hb8ARiAU/edit?usp=sharing"
 
-# Fungsi untuk mengubah URL share biasa menjadi URL download CSV/Excel khusus Streamlit
+# Fungsi untuk mengubah URL share biasa menjadi URL download CSV khusus
 def dapatkan_url_sheet(url, nama_sheet):
     base_url = url.split('/edit')[0]
     return f"{base_url}/gviz/tq?tqx=out:csv&sheet={nama_sheet}"
 
-# Membaca data secara live dari Google Sheets
+# Membaca data secara live dari Google Sheets dengan pengaman struktur kolom
 try:
     df_master = pd.read_csv(dapatkan_url_sheet(URL_SPREADSHEET, "Master"))
     df_masuk = pd.read_csv(dapatkan_url_sheet(URL_SPREADSHEET, "Masuk"))
     df_keluar = pd.read_csv(dapatkan_url_sheet(URL_SPREADSHEET, "Keluar"))
+    
+    # Bersihkan nama kolom dari spasi tidak sengaja dan samakan kapitalisasinya
+    df_master.columns = df_master.columns.str.strip().str.title()
+    df_masuk.columns = df_masuk.columns.str.strip().str.title()
+    df_keluar.columns = df_keluar.columns.str.strip().str.title()
+    
 except Exception as e:
     st.error("❌ Gagal terhubung ke Google Sheets. Pastikan URL sudah benar dan statusnya 'Anyone with the link'!")
     st.stop()
 
-# Sinkronisasi tipe data agar tidak error saat pencarian
-if not df_master.empty:
-    df_master["Kode Barang"] = df_master["Kode Barang"].astype(str).str.strip().str.upper()
-if not df_masuk.empty:
+# Validasi paksa jika kolom tetap tidak terdeteksi agar tidak memunculkan kotak merah menyeramkan
+if "Kode Barang" not in df_master.columns:
+    st.error("❌ Kolom 'Kode Barang' tidak ditemukan di tab 'Master' Google Sheets Anda. Periksa penulisan judul kolom Anda!")
+    st.stop()
+
+# Sinkronisasi tipe data Kode Barang
+df_master["Kode Barang"] = df_master["Kode Barang"].astype(str).str.strip().str.upper()
+if not df_masuk.empty and "Kode Barang" in df_masuk.columns:
     df_masuk["Kode Barang"] = df_masuk["Kode Barang"].astype(str).str.strip().str.upper()
-if not df_keluar.empty:
+if not df_keluar.empty and "Kode Barang" in df_keluar.columns:
     df_keluar["Kode Barang"] = df_keluar["Kode Barang"].astype(str).str.strip().str.upper()
 
 # --- INSTANSIASI SESSION STATE (KERANJANG BELANJA) ---
@@ -54,8 +64,8 @@ menu = st.sidebar.selectbox(
 # --- FUNGSI UTILITAS UNTUK MENGHITUNG STOK AKTUAL ---
 def hitung_stok_sekarang(kode_barang):
     stok_awal = df_master[df_master["Kode Barang"] == kode_barang]["Stok Awal"].sum()
-    total_masuk = df_masuk[df_masuk["Kode Barang"] == kode_barang]["Jumlah Masuk"].sum() if not df_masuk.empty else 0
-    total_keluar = df_keluar[df_keluar["Kode Barang"] == kode_barang]["Jumlah Keluar"].sum() if not df_keluar.empty else 0
+    total_masuk = df_masuk[df_masuk["Kode Barang"] == kode_barang]["Jumlah Masuk"].sum() if (not df_masuk.empty and "Jumlah Masuk" in df_masuk.columns) else 0
+    total_keluar = df_keluar[df_keluar["Kode Barang"] == kode_barang]["Jumlah Keluar"].sum() if (not df_keluar.empty and "Jumlah Keluar" in df_keluar.columns) else 0
     return int(stok_awal + total_masuk - total_keluar)
 
 # --- FUNGSI MENGUBAH DATAFRAME MENJADI FILE EXCEL DI MEMORI ---
@@ -80,8 +90,8 @@ if menu == "📊 Dashboard & Mutasi":
         st.markdown("---")
         
         if tipe_laporan == "📋 Ringkasan Semua Stok":
-            total_masuk = df_masuk.groupby("Kode Barang")["Jumlah Masuk"].sum().reset_index() if not df_masuk.empty else pd.DataFrame(columns=["Kode Barang", "Jumlah Masuk"])
-            total_keluar = df_keluar.groupby("Kode Barang")["Jumlah Keluar"].sum().reset_index() if not df_keluar.empty else pd.DataFrame(columns=["Kode Barang", "Jumlah Keluar"])
+            total_masuk = df_masuk.groupby("Kode Barang")["Jumlah Masuk"].sum().reset_index() if (not df_masuk.empty and "Jumlah Masuk" in df_masuk.columns) else pd.DataFrame(columns=["Kode Barang", "Jumlah Masuk"])
+            total_keluar = df_keluar.groupby("Kode Barang")["Jumlah Keluar"].sum().reset_index() if (not df_keluar.empty and "Jumlah Keluar" in df_keluar.columns) else pd.DataFrame(columns=["Kode Barang", "Jumlah Keluar"])
             
             df_mutasi = df_master.merge(total_masuk, on="Kode Barang", how="left").fillna(0)
             df_mutasi = df_mutasi.merge(total_keluar, on="Kode Barang", how="left").fillna(0)
@@ -90,7 +100,8 @@ if menu == "📊 Dashboard & Mutasi":
             df_mutasi["Status"] = df_mutasi["Stok Akhir"].apply(lambda x: "🟢 MASIH" if x > 0 else "🔴 HABIS")
             
             for col in ["Stok Awal", "Jumlah Masuk", "Jumlah Keluar", "Stok Akhir"]:
-                df_mutasi[col] = df_mutasi[col].astype(int)
+                if col in df_mutasi.columns:
+                    df_mutasi[col] = df_mutasi[col].astype(int)
                 
             st.dataframe(df_mutasi, use_container_width=True)
             
@@ -115,20 +126,22 @@ if menu == "📊 Dashboard & Mutasi":
             
             with col_h1:
                 st.markdown("#### 📥 Riwayat Barang Masuk (Restock)")
-                df_masuk_item = df_masuk[df_masuk["Kode Barang"] == kode_lacak] if not df_masuk.empty else pd.DataFrame()
+                df_masuk_item = df_masuk[df_masuk["Kode Barang"] == kode_lacak] if (not df_masuk.empty and "Kode Barang" in df_masuk.columns) else pd.DataFrame()
                 if df_masuk_item.empty:
                     st.info("Belum pernah ada riwayat barang masuk untuk item ini.")
                 else:
-                    st.dataframe(df_masuk_item[["Tanggal", "Jumlah Masuk"]], use_container_width=True)
+                    kolom_tampil = [c for c in ["Tanggal", "Jumlah Masuk"] if c in df_masuk_item.columns]
+                    st.dataframe(df_masuk_item[kolom_tampil], use_container_width=True)
                     
             with col_h2:
                 st.markdown("#### 📤 Riwayat Pengambilan (Barang Keluar)")
-                df_keluar_item = df_keluar[df_keluar["Kode Barang"] == kode_lacak] if not df_keluar.empty else pd.DataFrame()
+                df_keluar_item = df_keluar[df_keluar["Kode Barang"] == kode_lacak] if (not df_keluar.empty and "Kode Barang" in df_keluar.columns) else pd.DataFrame()
                 if df_keluar_item.empty:
                     st.info("Belum pernah ada riwayat pengambilan/barang keluar untuk item ini.")
                 else:
                     df_keluar_view_item = df_keluar_item.merge(df_master[["Kode Barang", "Nama Barang"]], on="Kode Barang", how="left")
-                    st.dataframe(df_keluar_view_item[["Tanggal", "Jumlah Keluar", "Keterangan"]], use_container_width=True)
+                    kolom_tampil_k = [c for c in ["Tanggal", "Jumlah Keluar", "Keterangan"] if c in df_keluar_view_item.columns]
+                    st.dataframe(df_keluar_view_item[kolom_tampil_k], use_container_width=True)
 
 
 # ==========================================
@@ -150,9 +163,7 @@ elif menu == "➕ Input Barang Baru":
             elif kode == "" or nama == "":
                 st.warning("⚠️ Kode dan Nama Barang tidak boleh kosong.")
             else:
-                new_data = pd.DataFrame([{"Kode Barang": kode, "Nama Barang": nama, "Stok Awal": stok_awal}])
-                # Pengingat instruksi simpan
-                st.success(f"✔️ Sukses menyiapkan {nama}! Silakan catat/salin data ini ke Google Sheets bagian Master Anda agar permanen.")
+                st.success(f"✔️ Sukses menyiapkan {nama}! Silakan catat data ini ke Google Sheets bagian Master Anda agar permanen.")
 
 
 # ==========================================
@@ -211,7 +222,6 @@ elif menu == "📥 Catat Barang Masuk":
                     st.session_state.keranjang_masuk = []
                     st.rerun()
                     
-                # Tombol untuk memindahkan isi keranjang ke file Excel/Sheets
                 excel_temp_masuk = konversi_ke_excel(df_temp_masuk[["Tanggal", "Kode Barang", "Jumlah Masuk"]])
                 st.download_button(
                     label="💾 UNDUH FILE UNTUK COPY KE GOOGLE SHEETS",
