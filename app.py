@@ -20,7 +20,7 @@ def inisialisasi_database():
 # Jalankan inisialisasi database
 inisialisasi_database()
 
-# --- INSTANSIASI SESSION STATE (KERANJANG & TOMBOL EDIT STATE) ---
+# --- INSTANSIASI SESSION STATE ---
 if "keranjang_masuk" not in st.session_state:
     st.session_state.keranjang_masuk = []
 if "keranjang_keluar" not in st.session_state:
@@ -47,7 +47,7 @@ menu = st.sidebar.selectbox(
     ]
 )
 
-# Membaca data aktual dari Excel dan memastikan tipe data Kode Barang sinkron sebagai string
+# Membaca data aktual dari Excel
 df_master = pd.read_excel(DB_FILE, sheet_name="Master")
 df_masuk = pd.read_excel(DB_FILE, sheet_name="Masuk")
 df_keluar = pd.read_excel(DB_FILE, sheet_name="Keluar")
@@ -71,7 +71,7 @@ def simpan_ke_excel(df, sheet_name):
     with pd.ExcelWriter(DB_FILE, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
         df.to_excel(writer, sheet_name=sheet_name, index=False)
 
-# --- FUNGSI MENGUBAH DATAFRAME MENJADI FILE EXCEL DI MEMORI (UNTUK DOWNLOAD) ---
+# --- FUNGSI MENGUBAH DATAFRAME MENJADI FILE EXCEL DI MEMORI ---
 def konversi_ke_excel(df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -328,10 +328,10 @@ elif menu == "📤 Catat Barang Keluar":
 
 
 # ==========================================
-# 5. MENU: KELOLA & RIWAYAT DATA (EDIT & HAPUS)
+# 5. MENU: KELOLA & RIWAYAT DATA (EDIT, HAPUS & TAMBAH)
 # ==========================================
 elif menu == "✏️ Kelola & Riwayat Data":
-    st.subheader("Kelola Riwayat Transaksi (Edit & Hapus Data)")
+    st.subheader("Kelola Riwayat Transaksi (Edit, Hapus & Tambah Data)")
     
     kategori_data = st.radio("Pilih Data yang Ingin Dikelola:", ["📥 Riwayat Barang Masuk", "📤 Riwayat Barang Keluar"], horizontal=True)
     st.markdown("---")
@@ -351,7 +351,7 @@ elif menu == "✏️ Kelola & Riwayat Data":
             st.info(f"Item Terpilih: **{item_terpilih['Nama Barang']}** | Jumlah: **{item_terpilih['Jumlah Masuk']}** | Tanggal: **{item_terpilih['Tanggal']}**")
             
             col_btn1, col_btn2 = st.columns(2)
-            if col_btn1.button("✏️ EDIT DATA BARIS INI", key="btn_edit_m"):
+            if col_btn1.button("✏️ EDIT / TAMBAH BARANG DI BARIS INI", key="btn_edit_m"):
                 st.session_state.mode_edit_masuk = True
                 st.rerun()
                 
@@ -364,17 +364,19 @@ elif menu == "✏️ Kelola & Riwayat Data":
                 
             if st.session_state.mode_edit_masuk:
                 st.markdown("---")
-                st.markdown("### 📝 Form Edit Barang Masuk")
+                st.markdown("### 📝 Form Penyesuaian Barang Masuk")
                 with st.form("form_edit_masuk"):
-                    edit_tgl = st.date_input("Ubah Tanggal", pd.to_datetime(item_terpilih["Tanggal"]))
+                    edit_tgl = st.date_input("Tanggal", pd.to_datetime(item_terpilih["Tanggal"]))
                     list_barang = (df_master["Kode Barang"] + " - " + df_master["Nama Barang"]).tolist()
                     default_idx = df_master["Kode Barang"].tolist().index(item_terpilih["Kode Barang"])
-                    edit_barang = st.selectbox("Ubah Barang", list_barang, index=default_idx)
-                    edit_qty = st.number_input("Ubah Jumlah Masuk", min_value=1, value=int(item_terpilih["Jumlah Masuk"]), step=1)
+                    edit_barang = st.selectbox("Pilih Barang", list_barang, index=default_idx)
+                    edit_qty = st.number_input("Jumlah Masuk", min_value=1, value=int(item_terpilih["Jumlah Masuk"]), step=1)
                     
-                    c_simpan, c_batal = st.columns(2)
-                    btn_save = c_simpan.form_submit_button("💾 SIMPAN PERUBAHAN DATA")
-                    btn_cancel = c_batal.form_submit_button("❌ BATAL EDIT")
+                    st.markdown("**Opsi Aksi Simpan:**")
+                    c_edit, c_tambah, c_batal = st.columns(3)
+                    btn_save = c_edit.form_submit_button("💾 SIMPAN PERUBAHAN BARIS")
+                    btn_add_new = c_tambah.form_submit_button("➕ TAMBAH SEBAGAI BARANG BARU")
+                    btn_cancel = c_batal.form_submit_button("❌ BATAL")
                     
                     if btn_save:
                         edit_kode = edit_barang.split(" - ")[0].strip().upper()
@@ -383,7 +385,17 @@ elif menu == "✏️ Kelola & Riwayat Data":
                         df_masuk.at[indeks_pilihan, "Jumlah Masuk"] = int(edit_qty)
                         
                         simpan_ke_excel(df_masuk, "Masuk")
-                        st.success("🎉 Perubahan data masuk berhasil disimpan permanen!")
+                        st.success("🎉 Perubahan data masuk berhasil disimpan!")
+                        st.session_state.mode_edit_masuk = False
+                        st.rerun()
+                        
+                    if btn_add_new:
+                        edit_kode = edit_barang.split(" - ")[0].strip().upper()
+                        new_row = pd.DataFrame([{"Tanggal": str(edit_tgl), "Kode Barang": edit_kode, "Jumlah Masuk": int(edit_qty)}])
+                        df_masuk = pd.concat([df_masuk, new_row], ignore_index=True)
+                        
+                        simpan_ke_excel(df_masuk, "Masuk")
+                        st.success("🎉 Sukses menambahkan barang baru ke dalam riwayat masuk!")
                         st.session_state.mode_edit_masuk = False
                         st.rerun()
                         
@@ -406,7 +418,7 @@ elif menu == "✏️ Kelola & Riwayat Data":
             st.info(f"Item Terpilih: **{item_terpilih['Nama Barang']}** | Jumlah: **{item_terpilih['Jumlah Keluar']}** | Keterangan: **{item_terpilih['Keterangan']}**")
             
             col_btn1, col_btn2 = st.columns(2)
-            if col_btn1.button("✏️ EDIT DATA BARIS INI", key="btn_edit_k"):
+            if col_btn1.button("✏️ EDIT / TAMBAH BARANG DI BARIS INI", key="btn_edit_k"):
                 st.session_state.mode_edit_keluar = True
                 st.rerun()
                 
@@ -419,40 +431,59 @@ elif menu == "✏️ Kelola & Riwayat Data":
                 
             if st.session_state.mode_edit_keluar:
                 st.markdown("---")
-                st.markdown("### 📝 Form Edit Barang Keluar")
+                st.markdown("### 📝 Form Penyesuaian Barang Keluar")
                 with st.form("form_edit_keluar"):
-                    edit_tgl = st.date_input("Ubah Tanggal", pd.to_datetime(item_terpilih["Tanggal"]))
-                    
+                    edit_tgl = st.date_input("Tanggal", pd.to_datetime(item_terpilih["Tanggal"]))
                     list_barang = (df_master["Kode Barang"] + " - " + df_master["Nama Barang"]).tolist()
                     default_idx = df_master["Kode Barang"].tolist().index(item_terpilih["Kode Barang"])
-                    edit_barang = st.selectbox("Ubah Barang", list_barang, index=default_idx)
+                    edit_barang = st.selectbox("Pilih Barang", list_barang, index=default_idx)
                     
                     edit_kode = edit_barang.split(" - ")[0].strip().upper()
                     stok_gudang = hitung_stok_sekarang(edit_kode)
+                    
+                    # Tambahkan balik stok item lama jika kodenya sama agar kalkulasinya valid
                     if edit_kode == item_terpilih["Kode Barang"]:
                         stok_gudang += int(item_terpilih["Jumlah Keluar"])
                         
                     st.caption(f"Batas Maksimal Pengambilan Aman: **{stok_gudang}**")
-                    edit_qty = st.number_input("Ubah Jumlah Keluar", min_value=1, value=int(item_terpilih["Jumlah Keluar"]), step=1)
-                    edit_ket = st.text_input("Ubah Keterangan / Bagian", value=str(item_terpilih["Keterangan"]))
+                    edit_qty = st.number_input("Jumlah Keluar", min_value=1, value=int(item_terpilih["Jumlah Keluar"]), step=1)
+                    edit_ket = st.text_input("Keterangan / Bagian", value=str(item_terpilih["Keterangan"]))
                     
-                    c_simpan, c_batal = st.columns(2)
-                    btn_save = c_simpan.form_submit_button("💾 SIMPAN PERUBAHAN DATA")
-                    btn_cancel = c_batal.form_submit_button("❌ BATAL EDIT")
+                    st.markdown("**Opsi Aksi Simpan:**")
+                    c_edit, c_tambah, c_batal = st.columns(3)
+                    btn_save = c_edit.form_submit_button("💾 SIMPAN PERUBAHAN BARIS")
+                    btn_add_new = c_tambah.form_submit_button("➕ TAMBAH SEBAGAI BARANG BARU")
+                    btn_cancel = c_batal.form_submit_button("❌ BATAL")
                     
                     if btn_save:
                         if edit_qty > stok_gudang:
-                            st.error(f"❌ Transaksi Gagal! Jumlah keluar ({edit_qty}) melebihi stok yang ada ({stok_gudang}).")
+                            st.error(f"❌ Gagal! Jumlah keluar melebihi batas aman ({stok_gudang}).")
                         elif edit_ket.strip() == "":
                             st.error("❌ Keterangan tidak boleh kosong!")
                         else:
                             df_keluar.at[indeks_pilihan, "Tanggal"] = str(edit_tgl)
                             df_keluar.at[indeks_pilihan, "Kode Barang"] = edit_kode
-                            df_keluar.at[indeks_pilihan, "Jumlah Keluar"] = int(edit_qty)
+                            df_keluar.at[indeks_piliation, "Jumlah Keluar"] = int(edit_qty)
                             df_keluar.at[indeks_pilihan, "Keterangan"] = edit_ket.strip()
                             
                             simpan_ke_excel(df_keluar, "Keluar")
-                            st.success("🎉 Perubahan data keluar berhasil disimpan permanen!")
+                            st.success("🎉 Perubahan data keluar berhasil disimpan!")
+                            st.session_state.mode_edit_keluar = False
+                            st.rerun()
+                            
+                    if btn_add_new:
+                        # Cek stok gudang ril tanpa tambahan barang lama jika yang ditambah adalah barang baru
+                        stok_riil_baru = hitung_stok_sekarang(edit_kode)
+                        if edit_qty > stok_riil_baru:
+                            st.error(f"❌ Gagal Tambah! Stok aktual untuk barang baru ini tidak mencukupi. Sisa gudang: {stok_riil_baru}")
+                        elif edit_ket.strip() == "":
+                            st.error("❌ Keterangan tidak boleh kosong!")
+                        else:
+                            new_row = pd.DataFrame([{"Tanggal": str(edit_tgl), "Kode Barang": edit_kode, "Jumlah Keluar": int(edit_qty), "Keterangan": edit_ket.strip()}])
+                            df_keluar = pd.concat([df_keluar, new_row], ignore_index=True)
+                            
+                            simpan_ke_excel(df_keluar, "Keluar")
+                            st.success("🎉 Sukses menambahkan item barang baru ke dalam riwayat keluar!")
                             st.session_state.mode_edit_keluar = False
                             st.rerun()
                             
