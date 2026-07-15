@@ -47,10 +47,17 @@ menu = st.sidebar.selectbox(
     ]
 )
 
-# Membaca data aktual dari Excel
+# Membaca data aktual dari Excel dan memastikan tipe data Kode Barang sinkron sebagai string
 df_master = pd.read_excel(DB_FILE, sheet_name="Master")
 df_masuk = pd.read_excel(DB_FILE, sheet_name="Masuk")
 df_keluar = pd.read_excel(DB_FILE, sheet_name="Keluar")
+
+if not df_master.empty:
+    df_master["Kode Barang"] = df_master["Kode Barang"].astype(str).str.strip().str.upper()
+if not df_masuk.empty:
+    df_masuk["Kode Barang"] = df_masuk["Kode Barang"].astype(str).str.strip().str.upper()
+if not df_keluar.empty:
+    df_keluar["Kode Barang"] = df_keluar["Kode Barang"].astype(str).str.strip().str.upper()
 
 # --- FUNGSI UTILITAS UNTUK MENGHITUNG STOK AKTUAL ---
 def hitung_stok_sekarang(kode_barang):
@@ -74,7 +81,7 @@ def konversi_ke_excel(df):
 
 
 # ==========================================
-# 1. MENU: DASHBOARD & MUTASI (DENGAN CETAK EXCEL)
+# 1. MENU: DASHBOARD & MUTASI
 # ==========================================
 if menu == "📊 Dashboard & Mutasi":
     st.subheader("Laporan Mutasi & Status Stok ATK")
@@ -86,8 +93,8 @@ if menu == "📊 Dashboard & Mutasi":
         st.markdown("---")
         
         if tipe_laporan == "📋 Ringkasan Semua Stok":
-            total_masuk = df_masuk.groupby("Kode Barang")["Jumlah Masuk"].sum().reset_index()
-            total_keluar = df_keluar.groupby("Kode Barang")["Jumlah Keluar"].sum().reset_index()
+            total_masuk = df_masuk.groupby("Kode Barang")["Jumlah Masuk"].sum().reset_index() if not df_masuk.empty else pd.DataFrame(columns=["Kode Barang", "Jumlah Masuk"])
+            total_keluar = df_keluar.groupby("Kode Barang")["Jumlah Keluar"].sum().reset_index() if not df_keluar.empty else pd.DataFrame(columns=["Kode Barang", "Jumlah Keluar"])
             
             df_mutasi = df_master.merge(total_masuk, on="Kode Barang", how="left").fillna(0)
             df_mutasi = df_mutasi.merge(total_keluar, on="Kode Barang", how="left").fillna(0)
@@ -100,7 +107,6 @@ if menu == "📊 Dashboard & Mutasi":
                 
             st.dataframe(df_mutasi, use_container_width=True)
             
-            # --- TOMBOL DOWNLOAD LAPORAN RINGKASAN STOK ---
             excel_data = konversi_ke_excel(df_mutasi)
             st.download_button(
                 label="📥 CETAK / DOWNLOAD LAPORAN STOK (EXCEL)",
@@ -112,7 +118,7 @@ if menu == "📊 Dashboard & Mutasi":
         else:
             st.markdown("### 🔎 Kartu Kendali & Histori Barang")
             pilihan_lacak = st.selectbox("Pilih ATK yang ingin Anda lacak historinya:", df_master["Kode Barang"] + " - " + df_master["Nama Barang"])
-            kode_lacak = pilihan_lacak.split(" - ")[0]
+            kode_lacak = pilihan_lacak.split(" - ")[0].strip().upper()
             nama_lacak = pilihan_lacak.split(" - ")[1]
             
             stok_saat_ini = hitung_stok_sekarang(kode_lacak)
@@ -122,13 +128,12 @@ if menu == "📊 Dashboard & Mutasi":
             
             with col_h1:
                 st.markdown("#### 📥 Riwayat Barang Masuk (Restock)")
-                df_masuk_item = df_masuk[df_masuk["Kode Barang"] == kode_lacak]
+                df_masuk_item = df_masuk[df_masuk["Kode Barang"] == kode_lacak] if not df_masuk.empty else pd.DataFrame()
                 if df_masuk_item.empty:
                     st.info("Belum pernah ada riwayat barang masuk untuk item ini.")
                 else:
                     st.dataframe(df_masuk_item[["Tanggal", "Jumlah Masuk"]], use_container_width=True)
                     
-                    # --- DOWNLOAD RIWAYAT MASUK ITEM ---
                     excel_masuk = konversi_ke_excel(df_masuk_item[["Tanggal", "Kode Barang", "Jumlah Masuk"]])
                     st.download_button(
                         label=f"🟢 Cetak Riwayat Masuk {nama_lacak}",
@@ -139,14 +144,13 @@ if menu == "📊 Dashboard & Mutasi":
                     
             with col_h2:
                 st.markdown("#### 📤 Riwayat Pengambilan (Barang Keluar)")
-                df_keluar_item = df_keluar[df_keluar["Kode Barang"] == kode_lacak]
+                df_keluar_item = df_keluar[df_keluar["Kode Barang"] == kode_lacak] if not df_keluar.empty else pd.DataFrame()
                 if df_keluar_item.empty:
                     st.info("Belum pernah ada riwayat pengambilan/barang keluar untuk item ini.")
                 else:
                     df_keluar_view_item = df_keluar_item.merge(df_master[["Kode Barang", "Nama Barang"]], on="Kode Barang", how="left")
                     st.dataframe(df_keluar_view_item[["Tanggal", "Jumlah Keluar", "Keterangan"]], use_container_width=True)
                     
-                    # --- DOWNLOAD RIWAYAT KELUAR ITEM ---
                     excel_keluar = konversi_ke_excel(df_keluar_view_item[["Tanggal", "Kode Barang", "Nama Barang", "Jumlah Keluar", "Keterangan"]])
                     st.download_button(
                         label=f"🔴 Cetak Riwayat Keluar {nama_lacak}",
@@ -204,7 +208,7 @@ elif menu == "📥 Catat Barang Masuk":
         with col_in:
             st.markdown("### ➕ Tambah Barang")
             pilihan_barang = st.selectbox("Pilih Barang ", df_master["Kode Barang"] + " - " + df_master["Nama Barang"])
-            kode_barang = pilihan_barang.split(" - ")[0]
+            kode_barang = pilihan_barang.split(" - ")[0].strip().upper()
             nama_barang = pilihan_barang.split(" - ")[1]
             jumlah_masuk = st.number_input("Jumlah Masuk", min_value=1, step=1)
             
@@ -271,7 +275,7 @@ elif menu == "📤 Catat Barang Keluar":
         with col_in:
             st.markdown("### ➕ Tambah Barang")
             pilihan_barang = st.selectbox("Pilih Barang Keluar", df_master["Kode Barang"] + " - " + df_master["Nama Barang"])
-            kode_barang = pilihan_barang.split(" - ")[0]
+            kode_barang = pilihan_barang.split(" - ")[0].strip().upper()
             nama_barang = pilihan_barang.split(" - ")[1]
             
             stok_gudang = hitung_stok_sekarang(kode_barang)
@@ -373,7 +377,7 @@ elif menu == "✏️ Kelola & Riwayat Data":
                     btn_cancel = c_batal.form_submit_button("❌ BATAL EDIT")
                     
                     if btn_save:
-                        edit_kode = edit_barang.split(" - ")[0]
+                        edit_kode = edit_barang.split(" - ")[0].strip().upper()
                         df_masuk.at[indeks_pilihan, "Tanggal"] = str(edit_tgl)
                         df_masuk.at[indeks_pilihan, "Kode Barang"] = edit_kode
                         df_masuk.at[indeks_pilihan, "Jumlah Masuk"] = int(edit_qty)
@@ -423,7 +427,7 @@ elif menu == "✏️ Kelola & Riwayat Data":
                     default_idx = df_master["Kode Barang"].tolist().index(item_terpilih["Kode Barang"])
                     edit_barang = st.selectbox("Ubah Barang", list_barang, index=default_idx)
                     
-                    edit_kode = edit_barang.split(" - ")[0]
+                    edit_kode = edit_barang.split(" - ")[0].strip().upper()
                     stok_gudang = hitung_stok_sekarang(edit_kode)
                     if edit_kode == item_terpilih["Kode Barang"]:
                         stok_gudang += int(item_terpilih["Jumlah Keluar"])
