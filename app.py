@@ -7,9 +7,9 @@ from datetime import datetime
 # =====================================================================
 # ⚠️ MASUKKAN LINK GOOGLE SHEETS & URL APPS SCRIPT KAMU DI SINI!
 # =====================================================================
-URL_SPREADSHEET = "https://docs.google.com/spreadsheets/d/NO_ID_UNIK_GOOGLE_SHEETS_KAMU/edit?usp=sharing"
+URL_SPREADSHEET = "https://docs.google.com/spreadsheets/d/19Qv2SMhD4Ua5NBAI2DDzC46NT6rcaTcJSJ1Hb8ARiAU/edit?usp=sharing"
 
-URL_APPS_SCRIPT = "https://script.google.com/macros/s/KODE_PANJANG_WEB_APP_APPS_SCRIPT_KAMU/exec"
+URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbzcCff5UkIivpDpelQxf4kyPEyQSX2uD0id715xhklL-i2vt7qZJ5ZD7I2TlHBUrpIz/exec"
 
 # Fungsi membaca data live dari Google Sheets
 def dapatkan_url_sheet(url, nama_sheet):
